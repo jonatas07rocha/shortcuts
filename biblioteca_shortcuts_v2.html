@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biblioteca de Shortcuts do iPhone</title>
+    <!-- Font Inter (Google Fonts) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <!-- Lucide Icons CDN (Será injetado pelo script no final, mas aqui está a referência para fins de documentação) -->
+    <!-- Para que o Lucide funcione em ambientes sandboxed como este, ele será carregado e renderizado via script. -->
+    
+    <style>
+        /* Estilos base (Mantenho a estética anterior) */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif; /* Fonte Inter aplicada */
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .search-container {
+            padding: 20px 40px;
+            background-color: #f0f0f0;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+        }
+        
+        .search-container input {
+            width: 100%;
+            padding: 12px 20px;
+            border: 2px solid #ddd;
+            border-radius: 25px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+        
+        .search-container input:focus {
+            outline: none;
+            border-color: #764ba2;
+            box-shadow: 0 0 0 3px rgba(118, 75, 162, 0.2);
+        }
+
+        .content {
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Estilos para as Seções de Categoria */
+        .category-section {
+            margin-bottom: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .category-section:hover {
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        }
+
+        .category-header {
+            padding: 18px 25px;
+            background-color: #f7f7f7;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid transparent;
+            transition: background-color 0.3s ease;
+        }
+
+        .category-section:not(.collapsed) .category-header {
+            background-color: #eef2ff; /* Cor mais clara quando expandido */
+            border-bottom-color: #e0e0e0;
+        }
+
+        .category-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #333;
+            display: flex;
+            align-items: center;
+        }
+
+        /* Estilo para o ícone Lucide (que será um SVG) */
+        .category-icon {
+            margin-right: 10px;
+            color: #764ba2; /* Cor para os ícones */
+            min-width: 28px; 
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Garante que o SVG do Lucide seja do tamanho correto */
+        .category-icon svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        .badge {
+            font-size: 0.9rem;
+            color: white;
+            background-color: #764ba2;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-weight: 500;
+        }
+        
+        .toggle-icon {
+            margin-left: 15px;
+            transition: transform 0.3s ease;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #764ba2;
+            display: inline-block; /* Garante a rotação correta */
+        }
+
+        .category-section.collapsed .toggle-icon {
+            transform: rotate(-90deg);
+        }
+        
+        .shortcuts-list {
+            padding: 20px 25px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .shortcut-item {
+            flex: 1 1 calc(33.333% - 20px); /* 3 items per row on desktop */
+            min-width: 300px;
+            background-color: white;
+            border: 1px solid #eee;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            position: relative;
+        }
+
+        .shortcut-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .shortcut-item a {
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+        
+        .shortcut-item h3 {
+            font-size: 1.1rem;
+            color: #764ba2;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+        
+        .shortcut-item p {
+            font-size: 0.9rem;
+            color: #666;
+            line-height: 1.4;
+            margin-bottom: 10px;
+        }
+
+        .shortcut-source {
+            font-size: 0.75rem;
+            color: #999;
+            font-style: italic;
+            display: block;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 60px 20px;
+            color: #888;
+        }
+
+        .no-results-icon {
+            /* O ícone de busca também será Lucide */
+            margin-bottom: 10px;
+            color: #ccc;
+        }
+
+        .no-results-icon svg {
+             width: 48px;
+             height: 48px;
+        }
+
+
+        .footer-stats {
+            padding: 15px 40px;
+            background-color: #f7f7f7;
+            border-top: 1px solid #ddd;
+            font-size: 0.9rem;
+            color: #555;
+            text-align: center;
+        }
+
+        /* Responsividade */
+        @media (max-width: 1000px) {
+            .shortcut-item {
+                flex: 1 1 calc(50% - 20px); /* 2 items per row on tablet */
+                min-width: 0;
+            }
+        }
+        
+        @media (max-width: 600px) {
+            .header {
+                padding: 30px 20px;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .search-container {
+                padding: 15px 20px;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+
+            .shortcut-item {
+                flex: 1 1 100%; /* 1 item per row on mobile */
+            }
+
+            .category-header {
+                padding: 15px 20px;
+            }
+            
+            .category-title {
+                font-size: 1.1rem;
+            }
+            
+            .badge {
+                padding: 3px 8px;
+                font-size: 0.8rem;
+            }
+
+            .footer-stats {
+                padding: 10px 20px;
+            }
+        }
+    </style>
+    <!-- Script do Lucide para transformar os atributos data-lucide em SVGs -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Biblioteca de Shortcuts do iPhone</h1>
+            <p>Atalhos úteis e essenciais, agora organizados por função.</p>
+        </header>
+
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Buscar atalho, como 'PDF', 'ChatGPT' ou 'Instagram'...">
+        </div>
+
+        <main class="content" id="content">
+            <!-- Conteúdo será renderizado aqui pelo JavaScript -->
+        </main>
+
+        <footer class="footer-stats">
+            Total de atalhos visíveis: <span id="visibleShortcuts">0</span>
+        </footer>
+    </div>
+
+    <script>
+        // Dados SIMULADOS (grande volume) - MANTIDOS IGUAIS
+        const videosData = [
+            {
+                title: "Top 10 Atalhos de IA Essenciais",
+                shortcuts: [
+                    { name: "Resumo do Artigo (ChatGPT)", description: "Usa o ChatGPT para resumir qualquer texto copiado ou compartilhado.", link: "https://www.icloud.com/shortcuts/ia-resumo" },
+                    { name: "Tradutor Instantâneo GPT", description: "Traduz texto selecionado usando a API do OpenAI.", link: "https://www.icloud.com/shortcuts/ia-tradutor" },
+                    { name: "Gerador de Ideias (Brainstorm)", description: "Cria uma lista de 5 ideias criativas baseadas em um tópico fornecido.", link: "https://www.icloud.com/shortcuts/ia-brainstorm" },
+                    { name: "Analisador de Sentimento", description: "Analisa o tom emocional de uma mensagem ou e-mail.", link: "https://www.icloud.com/shortcuts/ia-sentimento" },
+                    { name: "Transcrever Áudio com IA", description: "Converte áudio gravado em texto, usando modelos avançados de transcrição.", link: "https://www.icloud.com/shortcuts/ia-transcricao" },
+                    { name: "Pergunta e Resposta Perplexity", description: "Busca e responde a perguntas complexas usando a Perplexity AI.", link: "https://www.icloud.com/shortcuts/ia-perplexity" },
+                    { name: "Descritor de Imagens", description: "Descreve o conteúdo de uma foto usando visão computacional (AI).", link: "https://www.icloud.com/shortcuts/ia-descritor" },
+                ]
+            },
+            {
+                title: "20 Atalhos para Produtividade Máxima",
+                shortcuts: [
+                    { name: "Capturar Tela em PDF", description: "Tira um print completo da página web e salva como PDF no iCloud.", link: "https://www.icloud.com/shortcuts/prod-pdf" },
+                    { name: "Anotação Rápida (Bear)", description: "Abre o app Bear com um template para uma nota rápida.", link: "https://www.icloud.com/shortcuts/prod-bear" },
+                    { name: "Adicionar Tarefa ao Notion", description: "Adiciona um novo item a um banco de dados específico do Notion.", link: "https://www.icloud.com/shortcuts/prod-notion" },
+                    { name: "Limpar Área de Transferência", description: "Apaga o conteúdo copiado, protegendo a privacidade.", link: "https://www.icloud.com/shortcuts/prod-limpar" },
+                    { name: "Registro de Ideia de Artigo", description: "Cria um lembrete com título e data para uma ideia de conteúdo.", link: "https://www.icloud.com/shortcuts/prod-artigo" },
+                    { name: "Menu de Workflow Rápido", description: "Apresenta um menu com 5 ações de trabalho essenciais.", link: "https://www.icloud.com/shortcuts/prod-workflow" },
+                    { name: "E-mail com Template de Reunião", description: "Preenche automaticamente um e-mail com a pauta de uma reunião.", link: "https://www.icloud.com/shortcuts/prod-reuniao" },
+                    { name: "Converter para Markdown", description: "Transforma texto HTML ou RTF copiado em formato Markdown puro.", link: "https://www.icloud.com/shortcuts/prod-markdown" },
+                    { name: "Agendar Evento Rápido", description: "Cria um evento no Calendário com base em texto e hora detectados.", link: "https://www.icloud.com/shortcuts/prod-evento" },
+                ]
+            },
+            {
+                title: "Atalhos de Mídia, Fotos e Redes Sociais",
+                shortcuts: [
+                    { name: "Download de Vídeo do TikTok", description: "Baixa vídeos do TikTok sem marca d'água.", link: "https://www.icloud.com/shortcuts/midia-tiktok" },
+                    { name: "Download Mídia do Instagram", description: "Salva fotos e vídeos do Instagram (Reels, Stories, Posts).", link: "https://www.icloud.com/shortcuts/midia-insta" },
+                    { name: "Remover Fundo de Imagem", description: "Isola o objeto principal de uma foto, criando um PNG transparente.", link: "https://www.icloud.com/shortcuts/midia-fundo" },
+                    { name: "Redimensionar Foto para Stories", description: "Ajusta o tamanho e proporção de uma imagem para o Instagram Stories.", link: "https://www.icloud.com/shortcuts/midia-stories" },
+                    { name: "Adicionar Marca d'Água", description: "Coloca uma marca d'água de texto ou imagem em uma foto.", link: "https://www.icloud.com/shortcuts/midia-marca" },
+                    { name: "Converter para HEIC para JPG", description: "Converte um lote de fotos HEIC para o formato JPG universal.", link: "https://www.icloud.com/shortcuts/midia-heic" },
+                    { name: "Criar Álbum com Fotos Recentes", description: "Move as 10 fotos mais recentes para um novo álbum nomeado.", link: "https://www.icloud.com/shortcuts/midia-album" },
+                    { name: "Post Rápido no Twitter", description: "Abre o Twitter com a URL ou texto copiado pré-preenchido.", link: "https://www.icloud.com/shortcuts/midia-twitter" },
+                    { name: "Enquadramento Rápido (Vídeo)", description: "Corta um vídeo para proporção 1:1, ideal para posts quadrados.", link: "https://www.icloud.com/shortcuts/midia-enquadramento" },
+                ]
+            },
+            {
+                title: "Atalhos Essenciais de Sistema e Utilidades",
+                shortcuts: [
+                    { name: "Verificação de Cores Hex/RGB", description: "Identifica o código de uma cor capturada pela câmera ou foto.", link: "https://www.icloud.com/shortcuts/util-cores" },
+                    { name: "Menu de Acessibilidade", description: "Cria um menu para ligar/desligar rapidamente recursos como Inverter Cores.", link: "https://www.icloud.com/shortcuts/util-acess" },
+                    { name: "Desligar Wi-Fi e Bluetooth (Total)", description: "Desliga completamente os módulos, e não apenas desativa o status.", link: "https://www.icloud.com/shortcuts/util-desliga" },
+                    { name: "QR Code do Contato", description: "Gera um QR code com as informações de contato para fácil compartilhamento.", link: "https://www.icloud.com/shortcuts/util-qr" },
+                    { name: "Limpar Cache de Apps", description: "Força o fechamento de apps em segundo plano e limpa o cache (simulado).", link: "https://www.icloud.com/shortcuts/util-cache" },
+                    { name: "Alternar VPN", description: "Liga ou desliga rapidamente uma conexão VPN pré-configurada.", link: "https://www.icloud.com/shortcuts/util-vpn" },
+                    { name: "Modo Emergência Bateria", description: "Ajusta o brilho, desliga dados móveis e ativa o modo de pouca energia (battery).", link: "https://www.icloud.com/shortcuts/util-emerg" },
+                    { name: "Nível de Bateria em Alerta", description: "Exibe o percentual exato da bateria em um alerta de fácil visualização.", link: "https://www.icloud.com/shortcuts/util-bateria" },
+                    { name: "Abrir URL com Parâmetros", description: "Abre um link e anexa parâmetros de rastreamento.", link: "https://www.icloud.com/shortcuts/util-url" },
+                ]
+            },
+            {
+                title: "Atalhos de Casa Inteligente e Automação",
+                shortcuts: [
+                    { name: "Cena: Boa Noite HomeKit", description: "Ativa a cena 'Boa Noite', desligando luzes e trancando portas.", link: "https://www.icloud.com/shortcuts/home-noite" },
+                    { name: "Abrir Portão da Garagem (Localização)", description: "Abre o portão quando o usuário chega perto de casa (automation).", link: "https://www.icloud.com/shortcuts/home-garagem" },
+                    { name: "Interfone Rápido", description: "Liga para o intercom do Apple Home (HomeKit).", link: "https://www.icloud.com/shortcuts/home-interfone" },
+                    { name: "Medir Temperatura Externa", description: "Busca a temperatura externa e a lê em voz alta.", link: "https://www.icloud.com/shortcuts/home-temp" },
+                    { name: "Ativar Modo Cinema", description: "Diminui as luzes da sala para 10% e inicia a TV.", link: "https://www.icloud.com/shortcuts/home-cinema" },
+                ]
+            },
+            {
+                title: "Atalhos de Saúde e Fitness (Treino)",
+                shortcuts: [
+                    { name: "Iniciar Treino de Corrida (Fitness)", description: "Inicia um treino de corrida ao ar livre no Apple Watch.", link: "https://www.icloud.com/shortcuts/saude-corrida" },
+                    { name: "Registro Rápido de Água", description: "Adiciona 250ml ao seu registro diário de água (health).", link: "https://www.icloud.com/shortcuts/saude-agua" },
+                    { name: "Diário de Humor", description: "Registra seu humor e adiciona uma anotação de contexto (log health).", link: "https://www.icloud.com/shortcuts/saude-humor" },
+                    { name: "Pausar Alarme (Rotina)", description: "Pausa o alarme matinal e inicia uma música relaxante.", link: "https://www.icloud.com/shortcuts/saude-alarme" },
+                ]
+            },
+             // Adicionar mais dados simulados para atingir 'centenas'
+            {
+                title: "Mais Atalhos de Mídia e Social",
+                shortcuts: [
+                    { name: "Baixar Capa de Álbum", description: "Busca e salva a arte da capa de um álbum do Apple Music.", link: "https://www.icloud.com/shortcuts/musica-capa" },
+                    { name: "Criar Playlist Aleatória", description: "Cria uma playlist com 50 músicas aleatórias de sua biblioteca (music).", link: "https://www.icloud.com/shortcuts/musica-aleatoria" },
+                    { name: "Enviar Localização Rápida (SMS)", description: "Envia sua localização atual por SMS para um contato predefinido.", link: "https://www.icloud.com/shortcuts/mensagens-localizacao" },
+                    { name: "Tweet com PrintScreen", description: "Tira um screenshot e abre o Twitter para postagem imediata.", link: "https://www.icloud.com/shortcuts/midia-tweetprint" },
+                    { name: "Converter para GIF de Vídeo Curto", description: "Transforma um vídeo de 3 segundos em um GIF animado.", link: "https://www.icloud.com/shortcuts/midia-gifcurto" },
+                ]
+            },
+            {
+                title: "Utilidades e Truques de Sistema",
+                shortcuts: [
+                    { name: "Dicionário Rápido", description: "Busca o significado de uma palavra copiada e exibe em alerta.", link: "https://www.icloud.com/shortcuts/util-dicio" },
+                    { name: "Calculadora de Gorjeta", description: "Calcula gorjetas rapidamente em restaurantes.", link: "https://www.icloud.com/shortcuts/util-gorjeta" },
+                    { name: "Traduzir Página Web", description: "Traduz o conteúdo da página web atual.", link: "https://www.icloud.com/shortcuts/util-traduzirweb" },
+                    { name: "Modo Não Perturbe por 1 Hora", description: "Ativa o DND por exatamente 60 minutos.", link: "https://www.icloud.com/shortcuts/util-dnd" },
+                    { name: "Ligar Lanterna por 5 Segundos", description: "Ativa a lanterna e a desliga automaticamente.", link: "https://www.icloud.com/shortcuts/util-lanterna" },
+                    { name: "Verificação de Conectividade", description: "Testa Wi-Fi, Dados Móveis e Bluetooth (setting toggle).", link: "https://www.icloud.com/shortcuts/util-conec" },
+                ]
+            },
+            {
+                title: "Organização e Workflow Avançado",
+                shortcuts: [
+                    { name: "Menu de Cliques Duplos", description: "Ativa diferentes ações para cliques duplos na parte traseira do iPhone.", link: "https://www.icloud.com/shortcuts/prod-cliques" },
+                    { name: "Criar Checklist", description: "Gera um checklist interativo baseado em uma lista de itens digitada.", link: "https://www.icloud.com/shortcuts/prod-checklist" },
+                    { name: "Salvar Página Web no Pocket", description: "Envia o URL atual para o Pocket (workflow).", link: "https://www.icloud.com/shortcuts/prod-pocket" },
+                    { name: "Ligar Foco Trabalho", description: "Ativa o modo Foco Trabalho (schedule automation).", link: "https://www.icloud.com/shortcuts/prod-foco" },
+                    { name: "Contagem de Palavras Rápida", description: "Conta as palavras do texto copiado para o clipboard.", link: "https://www.icloud.com/shortcuts/prod-contagem" },
+                ]
+            },
+            // Repetições e variações para simular 100+ atalhos (mantendo a grande quantidade de dados)
+            ...Array(100).fill().map((_, i) => ({
+                title: `Atalhos Variados - Lote ${Math.floor(i / 10) + 1}`,
+                shortcuts: [
+                    { name: `AI Image Generator ${i + 1}`, description: `Gera uma imagem de arte com inteligência artificial.`, link: `https://www.icloud.com/shortcuts/ia-gen-${i}` },
+                    { name: `Daily Task Log ${i + 1}`, description: `Adiciona uma entrada ao log diário no Evernote (productivity).`, link: `https://www.icloud.com/shortcuts/prod-log-${i}` },
+                    { name: `Quick Message Template ${i + 1}`, description: `Envia uma mensagem de texto pré-escrita (messages).`, link: `https://www.icloud.com/shortcuts/msg-temp-${i}` },
+                    { name: `Toggle Low Power Mode ${i + 1}`, description: `Alterna o modo de pouca bateria (battery).`, link: `https://www.icloud.com/shortcuts/util-power-${i}` },
+                ]
+            })).flat()
+        ];
+        
+        // Mapeamento de categorias e palavras-chave (com ícones Lucide)
+        const categories = {
+            'ia': {
+                icon: 'brain-cog', // Ícone Lucide para IA
+                name: 'Inteligência Artificial & ChatGPT',
+                keywords: ['gpt', 'chatgpt', 'ai', 'summarize', 'transcribe', 'intelligence', 'brainstorm', 'describe', 'analyze', 'perplexity']
+            },
+            'automacao': {
+                icon: 'zap', // Ícone Lucide para Automação
+                name: 'Automação & Rotinas',
+                keywords: ['automation', 'routine', 'morning', 'evening', 'schedule', 'alarm', 'reminder', 'trigger', 'nfc', 'location', 'time']
+            },
+            'produtividade': {
+                icon: 'clipboard-list', // Ícone Lucide para Produtividade
+                name: 'Produtividade & Notas',
+                keywords: ['note', 'notes', 'reminder', 'task', 'calendar', 'event', 'productivity', 'workflow', 'clipboard', 'template', 'bear', 'notion', 'log']
+            },
+            'fotos': {
+                icon: 'camera', // Ícone Lucide para Câmera/Fotos
+                name: 'Fotos & Vídeos',
+                keywords: ['photo', 'image', 'video', 'screenshot', 'wallpaper', 'album', 'camera', 'picture', 'gallery', 'stories', 'convert', 'heic', 'jpg']
+            },
+            'casa': {
+                icon: 'home', // Ícone Lucide para Casa
+                name: 'Casa & HomeKit',
+                keywords: ['home', 'homekit', 'scene', 'garage', 'door', 'light', 'intercom', 'control', 'temp', 'cinema']
+            },
+            'mensagens': {
+                icon: 'message-square', // Ícone Lucide para Mensagens
+                name: 'Mensagens & Comunicação',
+                keywords: ['text', 'message', 'email', 'sms', 'whatsapp', 'contact', 'communication', 'auto-reply', 'tweet', 'twitter']
+            },
+            'musica': {
+                icon: 'music', // Ícone Lucide para Música
+                name: 'Música & Podcasts',
+                keywords: ['music', 'podcast', 'spotify', 'audio', 'play', 'song', 'playlist', 'shazam', 'airplay']
+            },
+            'utilidades': {
+                icon: 'wrench', // Ícone Lucide para Utilidades/Ferramentas
+                name: 'Utilidades & Sistema',
+                keywords: ['battery', 'brightness', 'wifi', 'vpn', 'setting', 'toggle', 'qr', 'search', 'scan', 'device', 'storage', 'dicio', 'gorjeta', 'dnd', 'lanterna', 'conectividade']
+            },
+            'saude': {
+                icon: 'heart-handshake', // Ícone Lucide para Saúde
+                name: 'Saúde & Fitness',
+                keywords: ['health', 'workout', 'fitness', 'tracker', 'exercise', 'log', 'activity', 'agua', 'humor', 'alarme', 'corrida']
+            },
+            'filmes': {
+                icon: 'clapperboard', // Ícone Lucide para Filmes
+                name: 'Filmes & Entretenimento',
+                keywords: ['movie', 'film', 'trailer', 'tv', 'stream', 'watch', 'youtube']
+            },
+            'outros': {
+                icon: 'more-horizontal', // Ícone Lucide ADICIONADO para Outros
+                name: 'Outros',
+                keywords: []
+            }
+        };
+
+        let currentFilter = 'all';
+        const content = document.getElementById('content');
+
+        // Função que categoriza o atalho usando as palavras-chave fornecidas
+        function categorizeShortcut(shortcutName, shortcutDescription) {
+            const lowerContent = (shortcutName + " " + shortcutDescription).toLowerCase();
+            
+            for (const [catKey, catData] of Object.entries(categories)) {
+                if (catKey === 'outros') continue;
+                
+                for (const keyword of catData.keywords) {
+                    if (lowerContent.includes(keyword)) {
+                        // Mapeia automação para utilidades e produtividade se for genérico
+                        if (catKey === 'automacao' && !['schedule', 'nfc', 'location', 'time'].some(k => lowerContent.includes(k))) {
+                            continue; 
+                        }
+                        return catKey;
+                    }
+                }
+            }
+            return 'outros';
+        }
+
+        // Organiza os dados brutos por categoria
+        function organizeByCategories() {
+            const organized = {};
+            
+            // Inicializa todas as categorias para garantir a ordem
+            Object.keys(categories).forEach(key => {
+                organized[key] = [];
+            });
+            
+            videosData.forEach(video => {
+                video.shortcuts.forEach(shortcut => {
+                    const category = categorizeShortcut(shortcut.name, shortcut.description);
+                    
+                    // Adiciona a informação da fonte original (vídeo)
+                    organized[category].push({
+                        title: shortcut.name,
+                        description: shortcut.description,
+                        link: shortcut.link,
+                        videoTitle: video.title
+                    });
+                });
+            });
+            return organized;
+        }
+
+        function toggleCategory(catKey) {
+            const section = document.getElementById(`category-${catKey}`);
+            const shortcutsList = document.getElementById(`shortcuts-${catKey}`);
+            
+            if (section.classList.contains('collapsed')) {
+                section.classList.remove('collapsed');
+                shortcutsList.style.display = 'flex';
+            } else {
+                section.classList.add('collapsed');
+                shortcutsList.style.display = 'none';
+            }
+        }
+        
+        function renderContent(searchTerm = '') {
+            const lowerSearch = searchTerm.toLowerCase().trim();
+            const organizedData = organizeByCategories();
+            
+            let html = '';
+            let visibleCount = 0;
+            let hasResults = false;
+
+            // Itera sobre as categorias na ordem definida no objeto `categories`
+            Object.keys(categories).forEach(catKey => {
+                const catData = categories[catKey];
+                const allShortcuts = organizedData[catKey] || [];
+                
+                // Filtra os atalhos por termo de busca no nome, descrição ou título do vídeo de origem
+                const filteredShortcuts = allShortcuts.filter(shortcut => {
+                    return shortcut.title.toLowerCase().includes(lowerSearch) ||
+                           shortcut.description.toLowerCase().includes(lowerSearch) ||
+                           shortcut.videoTitle.toLowerCase().includes(lowerSearch);
+                });
+                
+                if (filteredShortcuts.length > 0) {
+                    hasResults = true;
+                    visibleCount += filteredShortcuts.length;
+
+                    // A seção fica expandida se houver busca, ou colapsada por padrão
+                    const isCollapsed = lowerSearch === '';
+                    
+                    html += `
+                        <div class="category-section ${isCollapsed ? 'collapsed' : ''}" id="category-${catKey}">
+                            <div class="category-header" onclick="toggleCategory('${catKey}')">
+                                <h2 class="category-title">
+                                    <!-- Usando data-lucide para que a biblioteca Lucide transforme em SVG -->
+                                    <span class="category-icon" data-lucide="${catData.icon}"></span>
+                                    ${catData.name}
+                                </h2>
+                                <div class="video-meta">
+                                    <span class="badge">${filteredShortcuts.length} Atalhos</span>
+                                    <!-- Usando data-lucide para o ícone de toggle -->
+                                    <span class="toggle-icon" data-lucide="chevron-down"></span>
+                                </div>
+                            </div>
+                            <div class="shortcuts-list" id="shortcuts-${catKey}" style="display: ${isCollapsed ? 'none' : 'flex'};">
+                                ${filteredShortcuts.map(shortcut => `
+                                    <div class="shortcut-item">
+                                        <a href="${shortcut.link}" target="_blank" rel="noopener noreferrer">
+                                            <h3>${shortcut.title}</h3>
+                                            <p>${shortcut.description}</p>
+                                            <span class="shortcut-source">Fonte: ${shortcut.videoTitle}</span>
+                                        </a>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+            
+            if (!hasResults) {
+                html = `
+                    <div class="no-results">
+                        <div class="no-results-icon" data-lucide="search"></div>
+                        <h2>Nenhum resultado encontrado</h2>
+                        <p>Tente pesquisar por outros termos.</p>
+                    </div>
+                `;
+            }
+            
+            content.innerHTML = html;
+            document.getElementById('visibleShortcuts').textContent = visibleCount;
+            
+            // Corrige o ícone de toggle para o estado inicial/pesquisa
+            Object.keys(categories).forEach(catKey => {
+                const section = document.getElementById(`category-${catKey}`);
+                if (!section) return;
+
+                if (lowerSearch === '') {
+                    section.classList.add('collapsed');
+                    document.getElementById(`shortcuts-${catKey}`).style.display = 'none';
+                } else {
+                    section.classList.remove('collapsed');
+                    document.getElementById(`shortcuts-${catKey}`).style.display = 'flex';
+                }
+            });
+
+            // Importante: Chama a função para renderizar os SVGs do Lucide após a injeção do HTML
+            if (typeof lucide !== 'undefined') {
+                 lucide.createIcons();
+            }
+        }
+        
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            renderContent(e.target.value);
+        });
+        
+        // Renderiza o conteúdo inicial ao carregar
+        document.addEventListener('DOMContentLoaded', () => {
+            renderContent();
+        });
+        
+    </script>
+</body>
+</html>
