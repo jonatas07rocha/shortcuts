@@ -1,259 +1,332 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SICOM - Simulador de Circuitos</title>
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Zap, 
+  ShieldCheck, 
+  ShieldAlert, 
+  FileJson, 
+  Activity, 
+  UserCheck, 
+  ChevronRight, 
+  Settings2, 
+  Cpu, 
+  Layers, 
+  CheckCircle2, 
+  AlertCircle 
+} from 'lucide-react';
 
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://unpkg.com/lucide@latest"></script>
+/**
+ * SIMULADOR DE CONFORMIDADE DE WORKFLOW (v4.0)
+ * Foco: Validação de Circuito vs Matriz Imutável
+ */
 
-<style>
-body { font-family: 'Inter', sans-serif; }
-
-.circuit-line::before {
-    content: '';
-    position: absolute;
-    left: -20px;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    border-left: 2px dashed #e2e8f0;
-}
-
-.node-dot {
-    position: absolute;
-    left: -26px;
-    top: 22px;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-}
-
-.energy {
-    background: #38bdf8 !important;
-    transform: scale(1.3);
-}
-
-.node-active {
-    border-color: #1e293b;
-    background: #f8fafc;
-}
-</style>
-</head>
-
-<body class="bg-slate-100 min-h-screen p-6">
-
-<div class="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
-
-<!-- CONTROLE -->
-<div class="lg:col-span-5 bg-white p-6 rounded-xl">
-
-<input type="file" id="jsonInput" class="mb-4">
-
-<select id="processSelect" class="w-full p-2 border mb-4">
-<option>Carregue JSON</option>
-</select>
-
-<div id="switches" class="space-y-2"></div>
-
-<div id="errorDisplay" class="text-red-500 mt-4"></div>
-
-</div>
-
-<!-- VISUAL -->
-<div class="lg:col-span-7 bg-white p-6 rounded-xl">
-
-<div id="circuitOutput" class="relative ml-6 space-y-6"></div>
-
-</div>
-
-</div>
-
-<script>
-const UI = {
-    jsonInput: document.getElementById('jsonInput'),
-    processSelect: document.getElementById('processSelect'),
-    circuitOutput: document.getElementById('circuitOutput'),
-    error: document.getElementById('errorDisplay'),
-    switches: document.getElementById('switches')
-};
-
-let workflowData = null;
-
-const HIERARQUIA = [
- 'operacional_0','operacional_1',
- 'tatico_0','tatico_1',
- 'estrategico_0','estrategico_1','estrategico_2'
+const HIERARQUIA_ORDEM = [
+  'operacional_0', 'operacional_1', 
+  'tatico_0', 'tatico_1', 
+  'estrategico_0', 'estrategico_1', 'estrategico_2'
 ];
 
-// cria switches dinamicamente
-HIERARQUIA.forEach(nivel=>{
-    UI.switches.innerHTML += `
-    <label class="flex justify-between">
-        ${nivel}
-        <input type="checkbox" class="level" value="${nivel}" checked>
-    </label>`;
-});
+const App = () => {
+  const [workflowData, setWorkflowData] = useState(null);
+  const [selectedProcessId, setSelectedProcessId] = useState('');
+  const [switches, setSwitches] = useState(
+    HIERARQUIA_ORDEM.reduce((acc, level) => ({ ...acc, [level]: true }), {})
+  );
+  const [simulationResult, setSimulationResult] = useState({ nodes: [], isValid: true, error: '' });
 
-function getState(){
-    const s = {};
-    document.querySelectorAll('.level').forEach(el=>{
-        s[el.value]=el.checked;
-    });
-    return s;
-}
+  // 1. MAPEAMENTO DE STATUS (Sincronizado com WorkflowEngine.php)
+  const mapToStatus = (papel, acao) => {
+    if (papel === 'drh') {
+      return acao === 'valida' ? 'EM_TRIAGEM_DRH' : 'AGUARDANDO_REGISTRO_DRH';
+    }
+    const map = {
+      'operacional_1': { 'da_ciencia': 'CIENCIA_CHEFIA_IMEDIATA', 'decide': 'AGUARDANDO_DECISAO_CHEFIA' },
+      'tatico_0': { 'da_ciencia': 'CIENCIA_TATICO_0', 'decide': 'AGUARDANDO_DECISAO_TATICO_0' },
+      'tatico_1': { 'da_ciencia': 'CIENCIA_TATICO_1', 'decide': 'AGUARDANDO_DECISAO_TATICO_1' },
+      'estrategico_0': { 'da_ciencia': 'CIENCIA_ESTRATEGICO_0', 'decide': 'AGUARDANDO_DECISAO_ESTRATEGICO_0' },
+      'estrategico_1': { 'da_ciencia': 'CIENCIA_ESTRATEGICO_1', 'decide': 'AGUARDANDO_DECISAO_ESTRATEGICO_1' }
+    };
+    return map[papel]?.[acao] || 'HOMOLOGADO_DRH';
+  };
 
-const Engine = {
+  // 2. RESOLUÇÃO DE RESPONSÁVEL (Fallback Hierárquico)
+  const resolverResponsavel = (papelAlvo) => {
+    if (papelAlvo === 'drh') return 'drh';
+    const pos = HIERARQUIA_ORDEM.indexOf(papelAlvo);
+    if (pos === -1) return null;
 
-mapToStatus(p,a){
-    return p==='drh' ? `DRH_${a}` : `${p}_${a}`;
-},
-
-resolverResponsavel(p){
-    if(p==='drh') return 'drh';
-
-    const state = getState();
-    const pos = HIERARQUIA.indexOf(p);
-
-    for(let i=pos;i<HIERARQUIA.length;i++){
-        if(state[HIERARQUIA[i]]) return HIERARQUIA[i];
+    for (let i = pos; i < HIERARQUIA_ORDEM.length; i++) {
+      if (switches[HIERARQUIA_ORDEM[i]]) return HIERARQUIA_ORDEM[i];
     }
     return null;
-},
+  };
 
-getNext(processo,idx,depth=0){
-
-    if(depth>15) throw new Error("Loop");
-
-    const nextIdx = idx+1;
-    if(nextIdx>=processo.etapas.length) return null;
-
-    const e = processo.etapas[nextIdx];
-
-    if(e.papel!=='drh'){
-        const r = this.resolverResponsavel(e.papel);
-        if(!r) throw new Error(`Sem responsável ${e.papel}`);
-
-        if(e.acao==='da_ciencia'){
-            const prox = processo.etapas.slice(nextIdx+1)
-                .find(x=>x.acao==='decide');
-
-            if(prox && this.resolverResponsavel(prox.papel)===r){
-                return this.getNext(processo,nextIdx,depth+1);
-            }
-        }
-    }
-
-    return {
-        idx: nextIdx,
-        status: this.mapToStatus(e.papel,e.acao),
-        etapa: e
-    };
-}
-
-};
-
-UI.jsonInput.onchange = e=>{
+  // 3. CARREGAMENTO DE ARQUIVO
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
     const reader = new FileReader();
-
-    reader.onload = ev=>{
-        try{
-            const raw = JSON.parse(ev.target.result);
-            workflowData = raw.processos || raw;
-
-            UI.processSelect.innerHTML = '<option>Selecione</option>';
-
-            workflowData.forEach(p=>{
-                const o = document.createElement('option');
-                o.value = p.id;
-                o.textContent = p.processo || p.id;
-                UI.processSelect.appendChild(o);
-            });
-
-            UI.error.textContent='';
-
-        }catch(err){
-            UI.error.textContent = err.message;
-        }
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        setWorkflowData(data.processos || data);
+      } catch (err) {
+        alert("Erro ao ler JSON da Matriz.");
+      }
     };
+    reader.readAsText(file);
+  };
 
-    reader.readAsText(e.target.files[0]);
+  // 4. MOTOR DE SIMULAÇÃO E VALIDAÇÃO
+  useEffect(() => {
+    if (!workflowData || !selectedProcessId) return;
+
+    const processoMatriz = workflowData.find(p => String(p.id) === selectedProcessId);
+    if (!processoMatriz) return;
+
+    let nodes = [];
+    let error = '';
+    let isValid = true;
+
+    // Ponto de Partida Imutável
+    nodes.push({ status: 'SOLICITADO', responsavel: 'SERVIDORES', acao: 'INICIA', suprimido: false });
+
+    try {
+      const etapas = processoMatriz.etapas;
+      
+      for (let i = 0; i < etapas.length; i++) {
+        const etapa = etapas[i];
+        const respReal = resolverResponsavel(etapa.papel);
+
+        // Se a matriz exige um responsável e não há condutividade na hierarquia -> ERRO DE CONTRATO
+        if (!respReal) {
+          isValid = false;
+          throw new Error(`Circuito não existe na matriz: O nível '${etapa.papel}' é obrigatório para este processo e não possui responsável ativo ou superior para assumir.`);
+        }
+
+        // Regra de Ciência Redundante (Execução Simulada)
+        let isSuprimido = false;
+        if (etapa.acao === 'da_ciencia') {
+          const proxDecide = etapas.slice(i + 1).find(e => e.acao === 'decide');
+          if (proxDecide && resolverResponsavel(proxDecide.papel) === respReal) {
+            isSuprimido = true;
+          }
+        }
+
+        nodes.push({
+          status: mapToStatus(etapa.papel, etapa.acao),
+          responsavel: respReal,
+          acao: etapa.acao,
+          suprimido: isSuprimido,
+          papelOriginal: etapa.papel
+        });
+      }
+
+      // Fim do Circuito
+      nodes.push({ status: 'HOMOLOGADO_DRH', responsavel: 'DRH', acao: 'CONCLUI', suprimido: false });
+
+    } catch (err) {
+      error = err.message;
+      isValid = false;
+    }
+
+    setSimulationResult({ nodes, isValid, error });
+  }, [selectedProcessId, switches, workflowData]);
+
+  // Lista única de processos para o select
+  const uniqueProcesses = useMemo(() => {
+    if (!workflowData) return [];
+    return workflowData.map(p => ({ id: p.id, nome: p.processo || p.id }));
+  }, [workflowData]);
+
+  return (
+    <div className="min-h-screen bg-slate-50 p-6 md:p-12 text-slate-900 font-sans">
+      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        {/* COLUNA ESQUERDA: CONTROLE */}
+        <div className="lg:col-span-5 flex flex-col gap-6">
+          <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm">
+            <div className="flex items-center gap-3 mb-8">
+              <div className="p-2 bg-slate-900 text-white rounded-xl">
+                <Settings2 size={20} />
+              </div>
+              <div>
+                <h2 className="text-lg font-extrabold uppercase tracking-tight">Mesa de Comando</h2>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Controle de Condutividade</p>
+              </div>
+            </div>
+
+            {/* Upload */}
+            <div className="mb-6">
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">1. Matriz Principal (JSON)</label>
+              <input 
+                type="file" 
+                id="jsonUpload" 
+                className="hidden" 
+                accept=".json" 
+                onChange={handleFileUpload} 
+              />
+              <button 
+                onClick={() => document.getElementById('jsonUpload').click()}
+                className="w-full flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-200 rounded-2xl hover:bg-slate-50 hover:border-slate-400 transition-all text-slate-400 group"
+              >
+                <FileJson className="group-hover:text-slate-600 mb-2" />
+                <span className="text-xs font-bold uppercase group-hover:text-slate-600">Carregar Matriz</span>
+              </button>
+            </div>
+
+            {/* Select Processo */}
+            <div className="mb-8">
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">2. Selecionar Circuito</label>
+              <select 
+                value={selectedProcessId}
+                onChange={(e) => setSelectedProcessId(e.target.value)}
+                className="w-full p-4 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-slate-100 transition-all appearance-none"
+              >
+                <option value="">{workflowData ? 'Escolha o processo...' : 'Aguardando JSON...'}</option>
+                {uniqueProcesses.map(p => (
+                  <option key={p.id} value={p.id}>{p.nome}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Interruptores */}
+            <div className="space-y-3">
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">3. Simular Disponibilidade (Interruptores)</label>
+              <div className="grid grid-cols-1 gap-2">
+                {HIERARQUIA_ORDEM.map(level => (
+                  <div key={level} className="flex items-center justify-between p-3.5 bg-slate-50/50 rounded-xl border border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <Layers size={14} className="text-slate-400" />
+                      <span className="text-[11px] font-bold text-slate-600 uppercase">{level.replace('_', ' ')}</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={switches[level]} 
+                        onChange={() => setSwitches(s => ({ ...s, [level]: !s[level] }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-slate-900"></div>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Mensagem de Erro Crítico */}
+          {!simulationResult.isValid && (
+            <div className="bg-red-50 border border-red-100 p-6 rounded-3xl flex gap-4 items-start animate-in fade-in slide-in-from-top-4 duration-300">
+              <ShieldAlert className="text-red-600 shrink-0" />
+              <div>
+                <h4 className="text-xs font-black text-red-900 uppercase">Circuito Inválido!</h4>
+                <p className="text-xs text-red-700 mt-1 leading-relaxed font-medium">
+                  {simulationResult.error}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* COLUNA DIREITA: VISUALIZAÇÃO */}
+        <div className="lg:col-span-7">
+          <div className="bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-sm min-h-[700px] flex flex-col relative overflow-hidden">
+            
+            {/* Header Visual */}
+            <div className="flex items-center justify-between mb-12 relative z-10">
+              <div className="flex items-center gap-3">
+                <Activity className="text-slate-900" />
+                <h2 className="text-xl font-black uppercase tracking-tighter">Projeção da Matriz</h2>
+              </div>
+              <div className={`flex items-center gap-2 text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest ${simulationResult.isValid ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'}`}>
+                {simulationResult.isValid ? (
+                  <><ShieldCheck size={12} /> Circuito Íntegro</>
+                ) : (
+                  <><ShieldAlert size={12} /> Curto-Circuito</>
+                )}
+              </div>
+            </div>
+
+            {/* Board */}
+            <div className="relative flex-grow">
+              {/* Linha de Energia Lateral */}
+              <div className="absolute left-[23px] top-0 bottom-0 w-1 bg-slate-100 rounded-full overflow-hidden">
+                <div 
+                  className={`w-full transition-all duration-700 ease-in-out ${simulationResult.isValid ? 'bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)]'}`}
+                  style={{ height: selectedProcessId ? '100%' : '0%' }}
+                />
+              </div>
+
+              {/* Nós do Circuito */}
+              <div className="relative space-y-8">
+                {selectedProcessId ? (
+                  simulationResult.nodes.map((node, i) => (
+                    <div 
+                      key={i} 
+                      className={`relative flex items-start gap-10 group transition-all duration-500 ${node.suprimido ? 'opacity-30 grayscale' : 'opacity-100'}`}
+                    >
+                      {/* Indicador do Nó */}
+                      <div className="relative mt-5 z-10">
+                        <div className={`w-12 h-12 rounded-full border-4 border-white flex items-center justify-center shadow-md transition-all ${
+                          node.suprimido ? 'bg-slate-200' : 
+                          (!simulationResult.isValid && i === simulationResult.nodes.length - 1 ? 'bg-red-500' : 'bg-blue-600')
+                        }`}>
+                          {node.acao === 'CONCLUI' ? <CheckCircle2 size={20} className="text-white" /> : 
+                           node.acao === 'INICIA' ? <Zap size={20} className="text-white" /> :
+                           <Cpu size={18} className="text-white" />}
+                        </div>
+                      </div>
+
+                      {/* Card da Etapa */}
+                      <div className={`flex-grow p-6 rounded-2xl border transition-all ${
+                        node.suprimido ? 'bg-slate-50 border-slate-100' : 
+                        (!simulationResult.isValid && i === simulationResult.nodes.length - 1 ? 'bg-red-50 border-red-200 shadow-lg' : 'bg-white border-slate-200 hover:shadow-xl')
+                      }`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest ${
+                            node.suprimido ? 'bg-slate-200 text-slate-400' : 'bg-slate-900 text-white'
+                          }`}>
+                            {node.acao} {node.suprimido && '(SUPOSTA)'}
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-300">PASSO {i + 1}</span>
+                        </div>
+                        
+                        <h3 className={`text-xs font-black uppercase tracking-tight ${node.suprimido ? 'text-slate-400' : 'text-slate-900'}`}>
+                          {node.status.replace(/_/g, ' ')}
+                        </h3>
+
+                        {!node.suprimido && (
+                          <div className="mt-4 flex items-center gap-3 border-t border-slate-50 pt-3">
+                            <UserCheck size={14} className={simulationResult.isValid ? 'text-blue-500' : 'text-red-500'} />
+                            <div className="flex flex-col">
+                              <p className="text-[8px] font-bold text-slate-400 uppercase leading-none mb-1">Responsável na Matriz</p>
+                              <p className="text-[10px] font-black text-slate-700 uppercase">{node.responsavel.replace('_', ' ')}</p>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {node.suprimido && (
+                          <p className="mt-3 text-[9px] font-bold text-slate-400 uppercase italic">
+                            Etapa ignorada: Responsável idêntico à decisão subsequente.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-40 text-slate-300 opacity-30">
+                    <Activity size={64} className="mb-4" />
+                    <p className="text-sm font-bold uppercase tracking-widest">Aguardando Conexão com Matriz</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
-UI.processSelect.onchange = simular;
-document.addEventListener('change', e=>{
-    if(e.target.classList.contains('level')) simular();
-});
+export default App;
 
-function simular(){
-
-    const id = UI.processSelect.value;
-    if(!id || !workflowData) return;
-
-    const proc = workflowData.find(p=>String(p.id)===id);
-
-    UI.circuitOutput.innerHTML='';
-    UI.error.textContent='';
-
-    let idx=-1;
-    let nodes=[];
-    let safety=0;
-
-    try{
-
-        while(safety<30){
-            const n = Engine.getNext(proc,idx);
-            if(!n){
-                nodes.push({status:'FIM'});
-                break;
-            }
-            nodes.push(n);
-            idx=n.idx;
-            safety++;
-        }
-
-        render(nodes);
-        animate();
-
-    }catch(err){
-        UI.error.textContent = err.message;
-    }
-}
-
-function render(nodes){
-
-    UI.circuitOutput.innerHTML='';
-
-    nodes.forEach((n,i)=>{
-
-        const div=document.createElement('div');
-        div.className='circuit-line relative pl-8';
-
-        div.innerHTML=`
-        <div class="node-dot bg-slate-300"></div>
-        <div class="p-4 border rounded-lg">
-            ${n.status}
-        </div>`;
-
-        UI.circuitOutput.appendChild(div);
-    });
-}
-
-function animate(){
-    const dots=document.querySelectorAll('.node-dot');
-    let i=0;
-
-    function step(){
-        dots.forEach(d=>d.classList.remove('energy'));
-        if(dots[i]) dots[i].classList.add('energy');
-        i++;
-        if(i<dots.length) setTimeout(step,250);
-    }
-
-    step();
-}
-
-</script>
-</body>
-</html>
