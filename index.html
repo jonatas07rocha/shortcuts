@@ -3,16 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simulador de Conformidade v4.0</title>
+    <title>SICOM - Simulador de Conformidade</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
         body { font-family: 'Inter', sans-serif; }
-        .peer:checked ~ .peer-checked\:bg-slate-900 { background-color: #0f172a; }
     </style>
 </head>
 <body class="bg-slate-50">
@@ -21,42 +20,13 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // Componente para renderizar ícones do Lucide no React via CDN
-        const Icon = ({ name, size = 20, className = "" }) => {
-            const containerRef = React.useRef(null);
-
-            useEffect(() => {
-                if (containerRef.current) {
-                    containerRef.current.innerHTML = '';
-                    const iconName = name.charAt(0).toLowerCase() + name.slice(1).replace(/([A-Z])/g, '-$1').toLowerCase();
-                    const svg = lucide.createIcons({
-                        icons: { [name]: lucide[name] },
-                        attrs: {
-                            width: size,
-                            height: size,
-                            class: className
-                        }
-                    });
-                    
-                    // Fallback manual se o createIcons falhar no contexto
-                    const iconSvg = lucide[name];
-                    if (iconSvg) {
-                        const element = document.createElement('div');
-                        element.innerHTML = iconSvg[2] || ''; 
-                        // Nota: A estrutura do Lucide CDN pode variar, esta é a forma mais segura:
-                        const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-${iconName} ${className}">${lucide[name]}</svg>`;
-                        containerRef.current.innerHTML = svgString;
-                    }
-                }
-            }, [name, size, className]);
-
-            return <div ref={containerRef} className="inline-block" />;
-        };
-
+        // 1. Níveis reais extraídos do Backend
         const HIERARQUIA_ORDEM = [
-            'operacional_0', 'operacional_1', 
-            'tatico_0', 'tatico_1', 
-            'estrategico_0', 'estrategico_1', 'estrategico_2'
+            'operacional_1', 
+            'tatico_0', 
+            'tatico_1', 
+            'estrategico_0', 
+            'estrategico_1'
         ];
 
         const App = () => {
@@ -67,22 +37,59 @@
             );
             const [simulationResult, setSimulationResult] = useState({ nodes: [], isValid: true, error: '' });
 
+            // 1. MAPEAMENTO RIGOROSO (Cópia fiel do WorkflowEngine.php)
             const mapToStatus = (papel, acao) => {
-                if (papel === 'drh') return acao === 'valida' ? 'EM_TRIAGEM_DRH' : 'AGUARDANDO_REGISTRO_DRH';
                 const map = {
-                    'operacional_1': { 'da_ciencia': 'CIENCIA_CHEFIA_IMEDIATA', 'decide': 'AGUARDANDO_DECISAO_CHEFIA' },
-                    'tatico_0': { 'da_ciencia': 'CIENCIA_TATICO_0', 'decide': 'AGUARDANDO_DECISAO_TATICO_0' },
-                    'tatico_1': { 'da_ciencia': 'CIENCIA_TATICO_1', 'decide': 'AGUARDANDO_DECISAO_TATICO_1' },
-                    'estrategico_0': { 'da_ciencia': 'CIENCIA_ESTRATEGICO_0', 'decide': 'AGUARDANDO_DECISAO_ESTRATEGICO_0' },
-                    'estrategico_1': { 'da_ciencia': 'CIENCIA_ESTRATEGICO_1', 'decide': 'AGUARDANDO_DECISAO_ESTRATEGICO_1' }
+                    'drh': {
+                        'valida': 'EM_TRIAGEM_DRH',
+                        'registra': 'AGUARDANDO_REGISTRO_DRH'
+                    },
+                    'operacional_1': {
+                        'da_ciencia': 'CIENCIA_CHEFIA_IMEDIATA',
+                        'decide': 'AGUARDANDO_DECISAO_CHEFIA'
+                    },
+                    'tatico_0': {
+                        'da_ciencia': 'CIENCIA_TATICO_0',
+                        'decide': 'AGUARDANDO_DECISAO_TATICO_0'
+                    },
+                    'tatico_1': {
+                        'da_ciencia': 'CIENCIA_TATICO_1',
+                        'decide': 'AGUARDANDO_DECISAO_TATICO_1'
+                    },
+                    'estrategico_0': {
+                        'da_ciencia': 'CIENCIA_ESTRATEGICO_0',
+                        'decide': 'AGUARDANDO_DECISAO_ESTRATEGICO_0'
+                    },
+                    'estrategico_1': {
+                        'da_ciencia': 'CIENCIA_ESTRATEGICO_1',
+                        'decide': 'AGUARDANDO_DECISAO_ESTRATEGICO_1'
+                    }
                 };
                 return map[papel]?.[acao] || 'HOMOLOGADO_DRH';
+            };
+
+            // 2. VALIDAÇÃO DE CONTRATO DO JSON
+            const validarOrdemEtapas = (etapas) => {
+                const papeisComCiencia = [];
+                for (const etapa of etapas) {
+                    if (etapa.acao === 'da_ciencia') {
+                        papeisComCiencia.push(etapa.papel);
+                    }
+                    if (etapa.acao === 'decide') {
+                        if (!papeisComCiencia.includes(etapa.papel)) {
+                            throw new Error(`Ordem inválida no JSON: Ação 'decide' encontrada antes de 'da_ciencia' para o papel '${etapa.papel}'.`);
+                        }
+                        const index = papeisComCiencia.indexOf(etapa.papel);
+                        papeisComCiencia.splice(index, 1);
+                    }
+                }
             };
 
             const resolverResponsavel = (papelAlvo) => {
                 if (papelAlvo === 'drh') return 'drh';
                 const pos = HIERARQUIA_ORDEM.indexOf(papelAlvo);
                 if (pos === -1) return null;
+
                 for (let i = pos; i < HIERARQUIA_ORDEM.length; i++) {
                     if (switches[HIERARQUIA_ORDEM[i]]) return HIERARQUIA_ORDEM[i];
                 }
@@ -106,129 +113,182 @@
 
             useEffect(() => {
                 if (!workflowData || !selectedProcessId) return;
-                const processoMatriz = workflowData.find(p => String(p.id) === selectedProcessId);
+
+                const processoMatriz = (Array.isArray(workflowData) ? workflowData : workflowData.processos).find(p => String(p.id) === selectedProcessId);
                 if (!processoMatriz) return;
 
                 let nodes = [];
                 let error = '';
                 let isValid = true;
 
-                nodes.push({ status: 'SOLICITADO', responsavel: 'SERVIDORES', acao: 'INICIA', suprimido: false });
-
                 try {
                     const etapas = processoMatriz.etapas;
+                    validarOrdemEtapas(etapas);
+
+                    nodes.push({ status: 'SOLICITADO', responsavel: 'SERVIDORES', acao: 'INICIA', suprimido: false });
+
                     for (let i = 0; i < etapas.length; i++) {
                         const etapa = etapas[i];
                         const respReal = resolverResponsavel(etapa.papel);
+
                         if (!respReal) {
                             isValid = false;
-                            throw new Error(`Circuito interrompido: Nível '${etapa.papel}' sem substituto ativo.`);
+                            throw new Error(`Circuito não existe na matriz: O nível '${etapa.papel}' é obrigatório e não possui responsável ativo para assumir.`);
                         }
+
                         let isSuprimido = false;
                         if (etapa.acao === 'da_ciencia') {
                             const proxDecide = etapas.slice(i + 1).find(e => e.acao === 'decide');
-                            if (proxDecide && resolverResponsavel(proxDecide.papel) === respReal) isSuprimido = true;
+                            if (proxDecide && resolverResponsavel(proxDecide.papel) === respReal) {
+                                isSuprimido = true;
+                            }
                         }
+
                         nodes.push({
                             status: mapToStatus(etapa.papel, etapa.acao),
                             responsavel: respReal,
                             acao: etapa.acao,
-                            suprimido: isSuprimido
+                            suprimido: isSuprimido,
+                            papelOriginal: etapa.papel
                         });
                     }
+
                     nodes.push({ status: 'HOMOLOGADO_DRH', responsavel: 'DRH', acao: 'CONCLUI', suprimido: false });
+
                 } catch (err) {
                     error = err.message;
                     isValid = false;
                 }
+
                 setSimulationResult({ nodes, isValid, error });
             }, [selectedProcessId, switches, workflowData]);
 
+            const uniqueProcesses = useMemo(() => {
+                if (!workflowData) return [];
+                const list = Array.isArray(workflowData) ? workflowData : workflowData.processos;
+                return list.map(p => ({ id: p.id, nome: p.processo || p.id }));
+            }, [workflowData]);
+
+            useEffect(() => { lucide.createIcons(); }, [simulationResult, workflowData]);
+
             return (
-                <div className="min-h-screen p-4 md:p-12 text-slate-900">
+                <div className="min-h-screen p-6 md:p-12 text-slate-900">
                     <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
                         
-                        {/* CONTROLES */}
                         <div className="lg:col-span-5 flex flex-col gap-6">
                             <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm">
                                 <div className="flex items-center gap-3 mb-8">
                                     <div className="p-2 bg-slate-900 text-white rounded-xl">
-                                        <Icon name="Settings2" size={20} />
+                                        <i data-lucide="settings-2" className="w-5 h-5"></i>
                                     </div>
                                     <div>
-                                        <h2 className="text-lg font-black uppercase">Mesa de Comando</h2>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Condutividade de Matriz</p>
+                                        <h2 className="text-lg font-extrabold uppercase tracking-tight">Mesa de Comando</h2>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Controle de Condutividade</p>
                                     </div>
                                 </div>
 
                                 <div className="mb-6">
+                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">1. Matriz Principal (JSON)</label>
                                     <input type="file" id="jsonUpload" className="hidden" accept=".json" onChange={handleFileUpload} />
-                                    <button onClick={() => document.getElementById('jsonUpload').click()} className="w-full flex flex-col items-center p-6 border-2 border-dashed border-slate-200 rounded-2xl hover:bg-slate-50 transition-all text-slate-400 group">
-                                        <Icon name="FileJson" className="group-hover:text-slate-600 mb-2" />
-                                        <span className="text-xs font-bold uppercase">Carregar JSON</span>
+                                    <button onClick={() => document.getElementById('jsonUpload').click()} className="w-full flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-200 rounded-2xl hover:bg-slate-50 transition-all text-slate-400 group">
+                                        <i data-lucide="file-json" className="mb-2"></i>
+                                        <span className="text-xs font-bold uppercase group-hover:text-slate-600">Carregar Matriz</span>
                                     </button>
                                 </div>
 
                                 <div className="mb-8">
-                                    <select value={selectedProcessId} onChange={(e) => setSelectedProcessId(e.target.value)} className="w-full p-4 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 outline-none">
-                                        <option value="">{workflowData ? 'Selecione o processo...' : 'Aguardando Matriz...'}</option>
-                                        {workflowData?.map(p => <option key={p.id} value={p.id}>{p.processo || p.id}</option>)}
+                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">2. Selecionar Circuito</label>
+                                    <select value={selectedProcessId} onChange={(e) => setSelectedProcessId(e.target.value)} className="w-full p-4 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-slate-100 transition-all">
+                                        <option value="">{workflowData ? 'Escolha o processo...' : 'Aguardando JSON...'}</option>
+                                        {uniqueProcesses.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
                                     </select>
                                 </div>
 
-                                <div className="space-y-2">
-                                    {HIERARQUIA_ORDEM.map(level => (
-                                        <div key={level} className="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100">
-                                            <span className="text-[10px] font-bold text-slate-600 uppercase">{level.replace('_', ' ')}</span>
-                                            <label className="relative inline-flex items-center cursor-pointer">
-                                                <input type="checkbox" checked={switches[level]} onChange={() => setSwitches(s => ({ ...s, [level]: !s[level] }))} className="sr-only peer" />
-                                                <div className="w-9 h-5 bg-slate-200 rounded-full peer peer-checked:bg-slate-900 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
-                                            </label>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {!simulationResult.isValid && (
-                                <div className="bg-red-50 border border-red-100 p-6 rounded-3xl flex gap-4">
-                                    <Icon name="ShieldAlert" className="text-red-600" />
-                                    <p className="text-xs text-red-700 font-bold">{simulationResult.error}</p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* VISUALIZAÇÃO */}
-                        <div className="lg:col-span-7">
-                            <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm min-h-[600px] relative overflow-hidden">
-                                <div className="flex items-center justify-between mb-10 relative z-10">
-                                    <h2 className="text-xl font-black uppercase italic">Projeção</h2>
-                                    <div className={`text-[10px] font-black px-4 py-1.5 rounded-full uppercase ${simulationResult.isValid ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'}`}>
-                                        {simulationResult.isValid ? 'Circuito Ativo' : 'Curto-Circuito'}
-                                    </div>
-                                </div>
-
-                                <div className="relative">
-                                    <div className="absolute left-[20px] top-0 bottom-0 w-1 bg-slate-100 rounded-full overflow-hidden">
-                                        <div className={`w-full transition-all duration-1000 ${simulationResult.isValid ? 'bg-blue-500 shadow-[0_0_15px_blue]' : 'bg-red-500'}`} style={{ height: selectedProcessId ? '100%' : '0%' }} />
-                                    </div>
-
-                                    <div className="space-y-6">
-                                        {selectedProcessId && simulationResult.nodes.map((node, i) => (
-                                            <div key={i} className={`relative flex items-center gap-8 transition-opacity ${node.suprimido ? 'opacity-30' : 'opacity-100'}`}>
-                                                <div className={`w-10 h-10 rounded-full border-4 border-white flex items-center justify-center shadow-md z-10 ${node.suprimido ? 'bg-slate-300' : (simulationResult.isValid ? 'bg-blue-600' : 'bg-red-500')}`}>
-                                                    <Icon name={node.acao === 'CONCLUI' ? 'CheckCircle2' : node.acao === 'INICIA' ? 'Zap' : 'Cpu'} size={16} className="text-white" />
+                                <div className="space-y-3">
+                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">3. Simular Disponibilidade</label>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        {HIERARQUIA_ORDEM.map(level => (
+                                            <div key={level} className="flex items-center justify-between p-3.5 bg-slate-50/50 rounded-xl border border-slate-100">
+                                                <div className="flex items-center gap-3">
+                                                    <i data-lucide="layers" className="w-3.5 h-3.5 text-slate-400"></i>
+                                                    <span className="text-[11px] font-bold text-slate-600 uppercase">{level.replace('_', ' ')}</span>
                                                 </div>
-                                                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex-grow">
-                                                    <p className="text-[8px] font-black text-slate-400 uppercase">Status: {node.status}</p>
-                                                    <p className="text-[11px] font-black uppercase text-slate-800">{node.responsavel}</p>
-                                                </div>
+                                                <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input type="checkbox" checked={switches[level]} onChange={() => setSwitches(s => ({ ...s, [level]: !s[level] }))} className="sr-only peer" />
+                                                    <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-slate-900"></div>
+                                                </label>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
                             </div>
+
+                            {!simulationResult.isValid && (
+                                <div className="bg-red-50 border border-red-100 p-6 rounded-3xl flex gap-4 items-start shadow-sm">
+                                    <i data-lucide="shield-alert" className="text-red-600 shrink-0"></i>
+                                    <div>
+                                        <h4 className="text-xs font-black text-red-900 uppercase">Circuito Inválido!</h4>
+                                        <p className="text-xs text-red-700 mt-1 leading-relaxed font-medium">{simulationResult.error}</p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
+                        <div className="lg:col-span-7">
+                            <div className="bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-sm min-h-[700px] flex flex-col relative overflow-hidden">
+                                <div className="flex items-center justify-between mb-12 relative z-10">
+                                    <div className="flex items-center gap-3">
+                                        <i data-lucide="activity" className="text-slate-900"></i>
+                                        <h2 className="text-xl font-black uppercase tracking-tighter">Projeção da Matriz</h2>
+                                    </div>
+                                    <div className={`flex items-center gap-2 text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest ${simulationResult.isValid ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'}`}>
+                                        {simulationResult.isValid ? <span>Íntegro</span> : <span>Curto-Circuito</span>}
+                                    </div>
+                                </div>
+
+                                <div className="relative flex-grow">
+                                    <div className="absolute left-[23px] top-0 bottom-0 w-1 bg-slate-100 rounded-full overflow-hidden">
+                                        <div className={`w-full transition-all duration-700 ${simulationResult.isValid ? 'bg-blue-500' : 'bg-red-500'}`} style={{ height: selectedProcessId ? '100%' : '0%' }} />
+                                    </div>
+
+                                    <div className="relative space-y-8">
+                                        {selectedProcessId ? simulationResult.nodes.map((node, i) => (
+                                            <div key={i} className={`relative flex items-start gap-10 group transition-all duration-500 ${node.suprimido ? 'opacity-30 grayscale' : 'opacity-100'}`}>
+                                                <div className="relative mt-5 z-10">
+                                                    <div className={`w-12 h-12 rounded-full border-4 border-white flex items-center justify-center shadow-md ${node.suprimido ? 'bg-slate-200' : (!simulationResult.isValid && i === simulationResult.nodes.length - 1 ? 'bg-red-500' : 'bg-blue-600')}`}>
+                                                        {node.acao === 'CONCLUI' ? <i data-lucide="check-circle" className="text-white w-5 h-5"></i> : node.acao === 'INICIA' ? <i data-lucide="zap" className="text-white w-5 h-5"></i> : <i data-lucide="cpu" className="text-white w-4 h-4"></i>}
+                                                    </div>
+                                                </div>
+
+                                                <div className={`flex-grow p-6 rounded-2xl border transition-all ${node.suprimido ? 'bg-slate-50 border-slate-100' : (!simulationResult.isValid && i === simulationResult.nodes.length - 1 ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200')}`}>
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest ${node.suprimido ? 'bg-slate-200 text-slate-400' : 'bg-slate-900 text-white'}`}>
+                                                            {node.acao} {node.suprimido && '(SUPRIMIDA)'}
+                                                        </span>
+                                                        <span className="text-[10px] font-bold text-slate-300">PASSO {i + 1}</span>
+                                                    </div>
+                                                    <h3 className={`text-xs font-black uppercase tracking-tight ${node.suprimido ? 'text-slate-400' : 'text-slate-900'}`}>{node.status.replace(/_/g, ' ')}</h3>
+                                                    {!node.suprimido && (
+                                                        <div className="mt-4 flex items-center gap-3 border-t border-slate-50 pt-3">
+                                                            <i data-lucide="user-check" className={`w-3.5 h-3.5 ${simulationResult.isValid ? 'text-blue-500' : 'text-red-500'}`}></i>
+                                                            <div className="flex flex-col">
+                                                                <p className="text-[8px] font-bold text-slate-400 uppercase leading-none mb-1">Responsável na Matriz</p>
+                                                                <p className="text-[10px] font-black text-slate-700 uppercase">{node.responsavel.replace('_', ' ')}</p>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )) : (
+                                            <div className="flex flex-col items-center justify-center py-40 text-slate-300 opacity-30">
+                                                <i data-lucide="activity" className="w-16 h-16 mb-4"></i>
+                                                <p className="text-sm font-bold uppercase tracking-widest">Aguardando Conexão com Matriz</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             );
@@ -239,3 +299,4 @@
     </script>
 </body>
 </html>
+
