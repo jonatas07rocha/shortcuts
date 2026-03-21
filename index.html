@@ -11,39 +11,33 @@
 <style>
 body { font-family: Arial; }
 
-.switch { position: relative; display: inline-block; width: 44px; height: 24px; }
-.switch input { opacity: 0; width: 0; height: 0; }
-
-.slider {
-    position: absolute; cursor: pointer;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background-color: #cbd5e1; border-radius: 24px;
-}
-
-.slider:before {
-    position: absolute; content: "";
-    height: 18px; width: 18px;
-    left: 3px; bottom: 3px;
-    background-color: white; border-radius: 50%;
-}
-
-input:checked + .slider { background-color: #1e293b; }
-input:checked + .slider:before { transform: translateX(20px); }
-
-.node { padding: 10px; margin: 5px; border: 1px solid #ccc; cursor: pointer; }
+.node { padding: 12px; margin: 6px; border: 1px solid #ccc; cursor: pointer; border-radius: 10px; }
+.node.active { border-color: #111; background: #f1f5f9; }
+.node.energy { background: #e0f2fe; border-color: #0284c7; }
 .error { color: red; }
 </style>
 </head>
 
 <body class="p-6">
 
-<h2 class="font-bold mb-4">Simulador de Workflow</h2>
+<h2 class="font-bold mb-4">Simulador de Workflow ⚡</h2>
 
 <input type="file" id="jsonInput" accept=".json"><br><br>
 
 <select id="processSelect">
 <option value="">Carregue o JSON</option>
 </select>
+
+<div class="mt-4">
+<label>Hierarquia:</label><br>
+<label><input type="checkbox" class="level" value="operacional_0" checked> operacional_0</label>
+<label><input type="checkbox" class="level" value="operacional_1" checked> operacional_1</label>
+<label><input type="checkbox" class="level" value="tatico_0" checked> tatico_0</label>
+<label><input type="checkbox" class="level" value="tatico_1" checked> tatico_1</label>
+<label><input type="checkbox" class="level" value="estrategico_0" checked> estrategico_0</label>
+<label><input type="checkbox" class="level" value="estrategico_1" checked> estrategico_1</label>
+<label><input type="checkbox" class="level" value="estrategico_2" checked> estrategico_2</label>
+</div>
 
 <div id="errorDisplay" class="error mt-3"></div>
 
@@ -60,10 +54,17 @@ const UI = {
 let workflowData = null;
 
 const HIERARQUIA = [
-    'operacional_0','operacional_1',
-    'tatico_0','tatico_1',
+    'operacional_0','operacional_1','tatico_0','tatico_1',
     'estrategico_0','estrategico_1','estrategico_2'
 ];
+
+function getHierarchyState() {
+    const state = {};
+    document.querySelectorAll('.level').forEach(el => {
+        state[el.value] = el.checked;
+    });
+    return state;
+}
 
 const Engine = {
 
@@ -75,18 +76,21 @@ const Engine = {
     resolverResponsavel(papel) {
         if (papel === 'drh') return 'drh';
 
+        const state = getHierarchyState();
         const pos = HIERARQUIA.indexOf(papel);
+
         if (pos === -1) throw new Error(`Papel inválido: ${papel}`);
 
         for (let i = pos; i < HIERARQUIA.length; i++) {
-            return HIERARQUIA[i]; // simplificado (sempre existe)
+            if (state[HIERARQUIA[i]]) return HIERARQUIA[i];
         }
+
         return null;
     },
 
     getNextStatus(processo, idx, depth = 0) {
 
-        if (depth > 10) throw new Error("Loop detectado");
+        if (depth > 15) throw new Error("Loop detectado");
 
         const etapas = processo.etapas;
         const nextIdx = idx + 1;
@@ -135,15 +139,10 @@ UI.jsonInput.onchange = (e) => {
                 throw new Error("JSON inválido");
             }
 
-            if (!workflowData.length) {
-                throw new Error("Nenhum processo encontrado");
-            }
-
             UI.processSelect.innerHTML = '<option value="">Selecione</option>';
 
             workflowData.forEach(p => {
                 if (!p.id) return;
-
                 const opt = document.createElement('option');
                 opt.value = p.id;
                 opt.textContent = p.processo || `Processo ${p.id}`;
@@ -154,7 +153,6 @@ UI.jsonInput.onchange = (e) => {
 
         } catch (err) {
             workflowData = null;
-            UI.processSelect.innerHTML = '<option>Erro</option>';
             UI.error.textContent = err.message;
         }
     };
@@ -162,10 +160,13 @@ UI.jsonInput.onchange = (e) => {
     reader.readAsText(file);
 };
 
-UI.processSelect.onchange = () => {
+UI.processSelect.onchange = () => simular();
+document.querySelectorAll('.level').forEach(el => el.onchange = simular);
+
+function simular() {
 
     const id = UI.processSelect.value;
-    if (!id) return;
+    if (!id || !workflowData) return;
 
     const proc = workflowData.find(p => String(p.id) === id);
 
@@ -173,28 +174,57 @@ UI.processSelect.onchange = () => {
 
     let idx = -1;
     let safety = 0;
+    let nodes = [];
 
     try {
-
-        while (safety < 20) {
-
+        while (safety < 30) {
             const next = Engine.getNextStatus(proc, idx);
 
             if (!next) {
-                UI.output.innerHTML += `<div class="node">FIM</div>`;
+                nodes.push('FIM');
                 break;
             }
 
-            UI.output.innerHTML += `<div class="node">${next.status}</div>`;
-
+            nodes.push(next.status);
             idx = next.idx;
             safety++;
         }
 
+        renderNodes(nodes);
+
     } catch (err) {
         UI.error.textContent = err.message;
     }
-};
+}
+
+function renderNodes(nodes) {
+
+    UI.output.innerHTML = '';
+
+    nodes.forEach((n, i) => {
+        const div = document.createElement('div');
+        div.className = 'node';
+        div.textContent = n;
+        UI.output.appendChild(div);
+    });
+
+    animateEnergy();
+}
+
+function animateEnergy() {
+    const nodes = document.querySelectorAll('.node');
+    let i = 0;
+
+    function step() {
+        nodes.forEach(n => n.classList.remove('energy'));
+        if (nodes[i]) nodes[i].classList.add('energy');
+        i++;
+        if (i < nodes.length) setTimeout(step, 300);
+    }
+
+    step();
+}
+
 </script>
 
 </body>
