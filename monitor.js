@@ -1,55 +1,68 @@
 /**
- * MONITOR DE CONCURSOS - PSICOLOGIA (PCI CONCURSOS)
+ * MONITOR DE CONCURSOS - PSICOLOGIA & ADMINISTRAÇÃO
  * Versão Cloud (GitHub Actions + Bun)
  */
 
-// Lendo credenciais das variáveis de ambiente do GitHub
 const TOKEN = process.env.TELEGRAM_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
-const URL_PCI = "https://www.pciconcursos.com.br/cargos/psicologo";
+// Agora monitoramos duas URLs distintas
+const URLS = [
+  "https://www.pciconcursos.com.br/cargos/psicologo",
+  "https://www.pciconcursos.com.br/cargos/administrador"
+];
+
 const CACHE_FILE = "pci_cache.json";
 
 const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS",
              "MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SE","TO"];
 
 async function buscarConcursos() {
-  console.log(`[${new Date().toLocaleString('pt-BR')}] Iniciando busca via GitHub Actions...`);
+  console.log(`[${new Date().toLocaleString('pt-BR')}] Iniciando busca multicarreira...`);
   
   if (!TOKEN || !CHAT_ID) {
-    console.error("ERRO: TELEGRAM_TOKEN ou TELEGRAM_CHAT_ID não configurados nos Secrets.");
+    console.error("ERRO: Credenciais não configuradas.");
     return;
   }
 
   try {
-    const response = await fetch(URL_PCI);
-    const html = await response.text();
-    
-    const blocos = html.split('<ul class="link-d">');
-    let resultados = [];
+    let resultadosGerais = [];
 
-    for (let i = 1; i < blocos.length; i++) {
-      let bloco = blocos[i];
+    // Percorre cada uma das URLs configuradas
+    for (const url of URLS) {
+      const response = await fetch(url);
+      const html = await response.text();
       
-      let orgaoMatch = bloco.match(/class="noticia_desc[^"]*">(.*?)<\/a>/);
-      let orgao = orgaoMatch ? orgaoMatch[1].replace(/\s+/g, " ").trim() : null;
+      const blocos = html.split('<ul class="link-d">');
 
-      let cargoMatch = bloco.match(/<ul class="link-i">[\s\S]*?<a[^>]*>(.*?)<\/a>/);
-      let cargo = cargoMatch 
-        ? cargoMatch[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() 
-        : null;
+      for (let i = 1; i < blocos.length; i++) {
+        let bloco = blocos[i];
+        let orgaoMatch = bloco.match(/class="noticia_desc[^"]*">(.*?)<\/a>/);
+        let orgao = orgaoMatch ? orgaoMatch[1].replace(/\s+/g, " ").trim() : null;
 
-      if (orgao && cargo) resultados.push({ orgao, cargo });
+        let cargoMatch = bloco.match(/<ul class="link-i">[\s\S]*?<a[^>]*>(.*?)<\/a>/);
+        let cargo = cargoMatch 
+          ? cargoMatch[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() 
+          : null;
+
+        if (orgao && cargo) resultadosGerais.push({ orgao, cargo });
+      }
     }
 
-    let filtrados = resultados.filter(item => {
+    // Filtro atualizado para incluir Administrador
+    let filtrados = resultadosGerais.filter(item => {
       const upper = (item.orgao + " " + item.cargo).toUpperCase();
-      if (!upper.includes("PSICÓLOGO")) return false;
+      
+      // Verifica se é um dos cargos desejados
+      const ehCargoAlvo = upper.includes("PSICÓLOGO") || upper.includes("ADMINISTRADOR");
+      if (!ehCargoAlvo) return false;
+
+      // Mantém se for SP ou se não tiver UF específica (Nacional)
       if (upper.includes(" - SP")) return true;
       return !UFS.some(uf => upper.includes(" - " + uf));
     });
 
-    // Lendo cache do arquivo salvo pelo GitHub Action
+    // Gestão de Cache
     let antigos = [];
     const file = Bun.file(CACHE_FILE);
     if (await file.exists()) {
@@ -63,28 +76,25 @@ async function buscarConcursos() {
     if (novos.length > 0) {
       await enviarParaTelegram(novos);
     } else {
-      console.log("Nenhum concurso novo detectado nesta rodada.");
+      console.log("Nenhum novo edital de Psicologia ou Administração.");
     }
 
-    // Grava o novo estado para ser persistido pelo próximo workflow
     await Bun.write(CACHE_FILE, JSON.stringify(filtrados, null, 2));
 
   } catch (error) {
-    console.error("Erro crítico na execução:", error.message);
+    console.error("Erro na execução:", error.message);
   }
 }
 
 async function enviarParaTelegram(lista) {
-  let mensagem = "<b>🔔 Novos Concursos de Psicologia!</b>\n\n";
+  let mensagem = "<b>🔔 Novas Vagas Detectadas!</b>\n\n";
   
   lista.forEach(item => {
     mensagem += `🏛️ <b>${item.orgao}</b>\n👉 ${item.cargo}\n\n`;
   });
 
-  mensagem += `<a href="${URL_PCI}">Ver no site PCI Concursos</a>`;
-
   try {
-    const res = await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
+    await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -94,16 +104,10 @@ async function enviarParaTelegram(lista) {
         disable_web_page_preview: true
       })
     });
-    
-    if (res.ok) {
-      console.log(`${lista.length} notificações enviadas com sucesso.`);
-    } else {
-      console.error("Erro na API do Telegram:", await res.text());
-    }
+    console.log(`${lista.length} notificações enviadas.`);
   } catch (e) {
-    console.error("Erro de conexão com Telegram:", e.message);
+    console.error("Erro Telegram:", e.message);
   }
 }
 
-// Executa uma única vez por chamada do GitHub Actions
 buscarConcursos();
